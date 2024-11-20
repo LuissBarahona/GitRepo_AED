@@ -1,0 +1,344 @@
+#include <iostream>
+
+using namespace std;
+
+template<typename T>
+struct ElementNode {
+    int row, col;       // Posición del elemento
+    T value;            // Valor del elemento
+    ElementNode *right; // Siguiente nodo en la fila
+    ElementNode *down;  // Siguiente nodo en la columna
+
+    ElementNode(int r, int c, T val) : row(r), col(c), value(val), right(nullptr), down(nullptr) {}
+};
+
+template<typename T>
+struct HeaderNode {
+    int index;                   // Índice de la fila o columna
+    ElementNode<T> *next;        // Primer nodo de la fila o columna
+    HeaderNode *nextHeader;      // Siguiente nodo de cabecera
+
+    HeaderNode(int idx) : index(idx), next(nullptr), nextHeader(nullptr) {}
+};
+
+template<typename T>
+class SparseMatrix {
+private:
+    HeaderNode<T> *rowHeaders; // Lista de cabeceras de filas
+    HeaderNode<T> *colHeaders; // Lista de cabeceras de columnas
+    int numRows, numCols;      // Dimensiones de la matriz
+
+public:
+    SparseMatrix(int rows, int cols) : rowHeaders(nullptr), colHeaders(nullptr), numRows(rows), numCols(cols) {}
+
+    void addElement(int row, int col, T value) {
+        if (value == T{}) return; // Ignorar valores nulos
+
+        HeaderNode<T> *rowHeader = getOrCreateHeader(rowHeaders, row);
+        HeaderNode<T> *colHeader = getOrCreateHeader(colHeaders, col);
+
+        ElementNode<T> *newNode = new ElementNode<T>(row, col, value);
+
+        insertInRow(rowHeader, newNode);
+        insertInColumn(colHeader, newNode);
+    }
+
+    // Buscar un elemento
+    T findElement(int row, int col) {
+        HeaderNode<T> *rowHeader = findHeader(rowHeaders, row);
+        if (!rowHeader) return T{}; // No existe
+
+        ElementNode<T> *current = rowHeader->next;
+        while (current && current->col < col) {
+            current = current->right;
+        }
+
+        if (current && current->col == col) {
+            return current->value;
+        }
+
+        return T{}; // No encontrado
+    }
+
+    T operator()(int row, int col) { return findElement(row, col); }
+
+    // Eliminar un elemento
+    bool deleteElement(int row, int col) {
+        HeaderNode<T> *rowHeader = findHeader(rowHeaders, row);
+        HeaderNode<T> *colHeader = findHeader(colHeaders, col);
+
+        if (!rowHeader || !colHeader) return false;
+
+        // Eliminar de la fila
+        if (!removeFromRow(rowHeader, row, col)) return false;
+
+        // Eliminar de la columna
+        if (!removeFromColumn(colHeader, row, col)) return false;
+
+        return true;
+    }
+
+    // Método para comparar si dos matrices son iguales
+    bool Equal(const SparseMatrix<T> &other) const {
+        if (numRows != other.numRows || numCols != other.numCols) return false;
+
+        HeaderNode<T> *currentRow = rowHeaders;
+        while (currentRow) {
+            ElementNode<T> *currentNode = currentRow->next;
+            while (currentNode) {
+                T otherValue = other.buscar(currentNode->row, currentNode->col);
+                if (currentNode->value != otherValue) return false;
+                currentNode = currentNode->right;
+            }
+            currentRow = currentRow->nextHeader;
+        }
+        return true;
+    }
+
+    // Suma de matrices
+    SparseMatrix<T> Suma(const SparseMatrix<T> &other) const {
+        SparseMatrix<T> result(numRows, numCols);
+        if (numRows != other.numRows || numCols != other.numCols) {
+            throw std::invalid_argument("Dimensiones incompatibles para la suma.");
+        }
+
+        // Recorremos la matriz actual
+        HeaderNode<T> *currentRow = rowHeaders;
+        while (currentRow) {
+            ElementNode<T> *currentNode = currentRow->next;
+            while (currentNode) {
+                result.addElement(currentNode->row, currentNode->col, currentNode->value);
+                currentNode = currentNode->right;
+            }
+            currentRow = currentRow->nextHeader;
+        }
+
+        // Recorremos la matriz 'other'
+        HeaderNode<T> *otherRow = other.rowHeaders;
+        while (otherRow) {
+            ElementNode<T> *otherNode = otherRow->next;
+            while (otherNode) {
+                T value = result.buscar(otherNode->row, otherNode->col);
+                result.addElement(otherNode->row, otherNode->col, value + otherNode->value);
+                otherNode = otherNode->right;
+            }
+            otherRow = otherRow->nextHeader;
+        }
+        return result;
+    }
+
+    // Resta de matrices
+    SparseMatrix<T> Resta(const SparseMatrix<T> &other) const {
+        SparseMatrix<T> result(numRows, numCols);
+        if (numRows != other.numRows || numCols != other.numCols) {
+            throw std::invalid_argument("Dimensiones incompatibles para la suma.");
+        }
+
+        // Recorremos la matriz actual
+        HeaderNode<T> *currentRow = rowHeaders;
+        while (currentRow) {
+            ElementNode<T> *currentNode = currentRow->next;
+            while (currentNode) {
+                result.addElement(currentNode->row, currentNode->col, currentNode->value);
+                currentNode = currentNode->right;
+            }
+            currentRow = currentRow->nextHeader;
+        }
+
+        // Recorremos la matriz 'other'
+        HeaderNode<T> *otherRow = other.rowHeaders;
+        while (otherRow) {
+            ElementNode<T> *otherNode = otherRow->next;
+            while (otherNode) {
+                T value = result.findElement(otherNode->row, otherNode->col);
+                result.addElement(otherNode->row, otherNode->col, value - otherNode->value);
+                otherNode = otherNode->right;
+            }
+            otherRow = otherRow->nextHeader;
+        }
+        return result;
+    }
+
+    // Transpuesta de la matriz
+    SparseMatrix<T> Transpose() const {
+        SparseMatrix<T> result(numCols, numRows);
+
+        HeaderNode<T> *currentRow = rowHeaders;
+        while (currentRow) {
+            ElementNode<T> *currentNode = currentRow->next;
+            while (currentNode) {
+                result.addElement(currentNode->col, currentNode->row, currentNode->value);
+                currentNode = currentNode->right;
+            }
+            currentRow = currentRow->nextHeader;
+        }
+        return result;
+    }
+
+    // Multiplicación de matrices
+    SparseMatrix<T> Producto(const SparseMatrix<T> &other) const {
+        if (numCols != other.numRows) {
+            throw std::invalid_argument("Dimensiones incompatibles para la multiplicación.");
+        }
+
+        SparseMatrix<T> result(numRows, other.numCols);
+
+        HeaderNode<T> *currentRow = rowHeaders;
+        while (currentRow) {
+            ElementNode<T> *currentNode = currentRow->next;
+            while (currentNode) {
+                for (int col = 1; col <= other.numCols; ++col) {
+                    T otherValue = other.buscar(currentNode->col, col);
+                    if (otherValue != T{}) {
+                        T existingValue = result.buscar(currentNode->row, col);
+                        result.addElement(currentNode->row, col, existingValue + currentNode->value * otherValue);
+                    }
+                }
+                currentNode = currentNode->right;
+            }
+            currentRow = currentRow->nextHeader;
+        }
+
+        return result;
+    }
+
+    void print() {
+        for (int i = 1; i <= numRows; ++i) {
+            for (int j = 1; j <= numCols; ++j) {
+                cout << findElement(i, j) << " ";
+            }
+            cout << endl;
+        }
+    }
+
+    ~SparseMatrix() {
+        clearHeaders(rowHeaders);
+        clearHeaders(colHeaders);
+    }
+
+private:
+    HeaderNode<T> *getOrCreateHeader(HeaderNode<T> *&headers, int index) {
+        if (!headers) {
+            headers = new HeaderNode<T>(index);
+            return headers;
+        }
+
+        HeaderNode<T> *prev = nullptr;
+        HeaderNode<T> *current = headers;
+
+        while (current && current->index < index) {
+            prev = current;
+            current = current->nextHeader;
+        }
+
+        if (current && current->index == index) {
+            return current;
+        }
+
+        HeaderNode<T> *newHeader = new HeaderNode<T>(index);
+        if (prev) {
+            prev->nextHeader = newHeader;
+        } else {
+            headers = newHeader;
+        }
+        newHeader->nextHeader = current;
+        return newHeader;
+    }
+
+    HeaderNode<T> *findHeader(HeaderNode<T> *headers, int index) const {
+        while (headers && headers->index != index) {
+            headers = headers->nextHeader;
+        }
+        return headers;
+    }
+
+    void clearHeaders(HeaderNode<T> *&headers) {
+        while (headers) {
+            ElementNode<T> *currentNode = headers->next;
+            while (currentNode) {
+                ElementNode<T> *temp = currentNode;
+                currentNode = currentNode->right;
+                delete temp;
+            }
+            HeaderNode<T> *tempHeader = headers;
+            headers = headers->nextHeader;
+            delete tempHeader;
+        }
+    }
+
+    void insertInRow(HeaderNode<T> *rowHeader, ElementNode<T> *newNode) {
+        ElementNode<T> *prev = nullptr;
+        ElementNode<T> *current = rowHeader->next;
+
+        while (current && current->col < newNode->col) {
+            prev = current;
+            current = current->right;
+        }
+
+        if (prev) {
+            prev->right = newNode;
+        } else {
+            rowHeader->next = newNode;
+        }
+        newNode->right = current;
+    }
+
+    void insertInColumn(HeaderNode<T> *colHeader, ElementNode<T> *newNode) {
+        ElementNode<T> *prev = nullptr;
+        ElementNode<T> *current = colHeader->next;
+
+        while (current && current->row < newNode->row) {
+            prev = current;
+            current = current->down;
+        }
+
+        if (prev) {
+            prev->down = newNode;
+        } else {
+            colHeader->next = newNode;
+        }
+        newNode->down = current;
+    }
+
+    bool removeFromRow(HeaderNode<T> *rowHeader, int row, int col) {
+        ElementNode<T> *prev = nullptr;
+        ElementNode<T> *current = rowHeader->next;
+
+        while (current && current->col < col) {
+            prev = current;
+            current = current->right;
+        }
+
+        if (!current || current->col != col) return false;
+
+        if (prev) {
+            prev->right = current->right;
+        } else {
+            rowHeader->next = current->right;
+        }
+
+        delete current;
+        return true;
+    }
+
+    bool removeFromColumn(HeaderNode<T> *colHeader, int row, int col) {
+        ElementNode<T> *prev = nullptr;
+        ElementNode<T> *current = colHeader->next;
+
+        while (current && current->row < row) {
+            prev = current;
+            current = current->down;
+        }
+
+        if (!current || current->row != row) return false;
+
+        if (prev) {
+            prev->down = current->down;
+        } else {
+            colHeader->next = current->down;
+        }
+
+        delete current;
+        return true;
+    }
+};
