@@ -32,18 +32,18 @@ public:
 
     void insert(T valor);
     T valor_min();
+    Nodo<T>* extractMin();
+    void decreaseNode(Nodo<T>* nodo, T valor);
+    void deleteNode(Nodo<T>* nodo);
+    FHeap Union(FHeap<T>);
+
     bool empty();
     int size();
-    FHeap Union(FHeap<T>);
-    Nodo<T>* extractMin();
     void consolidate();
     void print() { print_nodo(rootlist); }
-    void visualizar();
-   
+    void visualizar();   
     void cortar(Nodo<T>* hijo, Nodo<T>* padre);
     void cascada(Nodo<T>* nodo);
-   void deleteNode(Nodo<T>* nodo);
-    void decreaseNode(Nodo<T>* nodo, T valor);
     Nodo<T>* findNode(T valor); // Método para encontrar un nodo por su valor
     void deleteByKey(T valor);  // Método para eliminar un nodo por su clave
     void decreaseByKey(T valor, T nuevo_valor);  // Método para disminuir un valor por su clave
